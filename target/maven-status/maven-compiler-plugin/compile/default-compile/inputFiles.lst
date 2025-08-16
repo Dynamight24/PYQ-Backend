@@ -1,0 +1,10 @@
+D:\PYQ\backend\src\main\java\com\uietpapers\service\PaperService.java
+D:\PYQ\backend\src\main\java\com\uietpapers\service\AdminConfig.java
+D:\PYQ\backend\src\main\java\com\uietpapers\service\StorageService.java
+D:\PYQ\backend\src\main\java\com\uietpapers\UietPapersApplication.java
+D:\PYQ\backend\src\main\java\com\uietpapers\dto\PaperRequest.java
+D:\PYQ\backend\src\main\java\com\uietpapers\repository\PaperRepository.java
+D:\PYQ\backend\src\main\java\com\uietpapers\controller\PaperController.java
+D:\PYQ\backend\src\main\java\com\uietpapers\dto\UploadResponse.java
+D:\PYQ\backend\src\main\java\com\uietpapers\entity\Paper.java
+D:\PYQ\backend\src\main\java\com\uietpapers\config\CorsConfig.java

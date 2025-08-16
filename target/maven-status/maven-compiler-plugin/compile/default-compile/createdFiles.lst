@@ -1,0 +1,10 @@
+com\uietpapers\config\CorsConfig.class
+com\uietpapers\repository\PaperRepository.class
+com\uietpapers\UietPapersApplication.class
+com\uietpapers\service\AdminConfig.class
+com\uietpapers\service\StorageService.class
+com\uietpapers\dto\UploadResponse.class
+com\uietpapers\entity\Paper.class
+com\uietpapers\service\PaperService.class
+com\uietpapers\controller\PaperController.class
+com\uietpapers\dto\PaperRequest.class
