@@ -1,10 +1,5 @@
 package com.uietpapers.service;
 
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
-
 import com.uietpapers.dto.PaperRequest;
 import com.uietpapers.entity.Paper;
 import com.uietpapers.entity.PendingPaper;
@@ -17,7 +12,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.*;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,33 +24,13 @@ public class PaperService {
     private final PaperRepository paperRepo;
     private final PendingPaperRepository pendingRepo;
     private final StorageService storage;
-    private final String tessDataPath; // optimized: keep tessdata path
 
     private static final Logger logger = LoggerFactory.getLogger(PaperService.class);
 
-    public PaperService(PaperRepository paperRepo, PendingPaperRepository pendingRepo, StorageService storage) throws IOException {
+    public PaperService(PaperRepository paperRepo, PendingPaperRepository pendingRepo, StorageService storage) {
         this.paperRepo = paperRepo;
         this.pendingRepo = pendingRepo;
         this.storage = storage;
-
-        // Copy tessdata to temporary folder once at startup
-        File tessDataTemp = new File(System.getProperty("java.io.tmpdir"), "tessdata");
-        if (!tessDataTemp.exists()) {
-            tessDataTemp.mkdirs();
-            Path resourceTess = Paths.get("src/main/resources/tessdata");
-            if (Files.exists(resourceTess)) {
-                Files.walk(resourceTess).forEach(path -> {
-                    try {
-                        Path dest = tessDataTemp.toPath().resolve(resourceTess.relativize(path));
-                        if (Files.isDirectory(path)) Files.createDirectories(dest);
-                        else Files.copy(path, dest, StandardCopyOption.REPLACE_EXISTING);
-                    } catch (IOException e) {
-                        logger.error("Failed to copy tessdata file: " + path, e);
-                    }
-                });
-            }
-        }
-        this.tessDataPath = tessDataTemp.getAbsolutePath();
     }
 
     // Upload + approve directly
@@ -116,14 +90,13 @@ public class PaperService {
         return lower.contains("exam") || lower.contains("question") || lower.contains("marks");
     }
 
-    // OCR text extraction only
+    // OCR text extraction
     private String extractTextFromPDF(MultipartFile file) throws IOException {
         File tempFile = File.createTempFile("upload-", ".pdf");
         file.transferTo(tempFile);
 
         Tesseract tesseract = new Tesseract();
-        tesseract.setDatapath(tessDataPath);
-        tesseract.setLanguage("eng");
+        tesseract.setLanguage("eng"); // TESSDATA_PREFIX ensures traineddata is found
 
         String extractedText = "";
         try {
@@ -157,11 +130,7 @@ public class PaperService {
         }
 
         if (filePath != null) {
-            try {
-                storage.delete(filePath);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            try { storage.delete(filePath); } catch (Exception e) { e.printStackTrace(); }
         }
 
         paperRepo.delete(paper);
