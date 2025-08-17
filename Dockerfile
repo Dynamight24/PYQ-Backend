@@ -18,13 +18,21 @@ RUN mvn -q -DskipTests package
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 
-# Install Tesseract OCR + English language
+# Install Tesseract OCR with all dependencies
 RUN apt-get update && \
-    apt-get install -y tesseract-ocr tesseract-ocr-eng libtesseract-dev && \
+    apt-get install -y \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    libtesseract-dev \
+    libleptonica-dev \
+    ghostscript && \
     rm -rf /var/lib/apt/lists/*
 
-# Set tessdata path so Tesseract can find language files
-ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata/
+# Verify Tesseract installation
+RUN tesseract --version
+
+# Set tessdata path (this is the standard location in Debian/Ubuntu)
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/tessdata
 
 # Copy built jar
 COPY --from=build /app/target/uiet-papers-0.0.1-SNAPSHOT.jar app.jar
