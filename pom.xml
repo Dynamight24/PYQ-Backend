@@ -14,15 +14,26 @@
     <spring-boot.version>3.3.2</spring-boot.version>
   </properties>
 
-   <repositories>
-        <repository>
-            <id>djl-bom</id>
-            <url>https://mlrepo.djl.ai/maven/</url>
-        </repository>
-    </repositories>
+  <!-- DJL repository -->
+  <repositories>
+    <repository>
+      <id>djl-bom</id>
+      <url>https://mlrepo.djl.ai/maven/</url>
+    </repository>
+  </repositories>
 
   <dependencyManagement>
     <dependencies>
+      <!-- DJL BOM for version management -->
+      <dependency>
+        <groupId>ai.djl</groupId>
+        <artifactId>djl-bom</artifactId>
+        <version>0.26.0</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+
+      <!-- Spring Boot BOM -->
       <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-dependencies</artifactId>
@@ -34,6 +45,7 @@
   </dependencyManagement>
 
   <dependencies>
+    <!-- Spring Boot -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
@@ -52,44 +64,41 @@
       <scope>runtime</scope>
     </dependency>
 
+    <!-- Jackson -->
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
     </dependency>
 
-   <dependency>
-        <groupId>ai.djl</groupId>
-        <artifactId>djl-api</artifactId>
-        <version>0.26.0</version>
+    <!-- DJL Dependencies (no version needed, BOM manages it) -->
+    <dependency>
+      <groupId>ai.djl</groupId>
+      <artifactId>djl-api</artifactId>
     </dependency>
     <dependency>
-        <groupId>ai.djl</groupId>
-        <artifactId>djl-pytorch-engine</artifactId>
-        <version>0.26.0</version>
+      <groupId>ai.djl</groupId>
+      <artifactId>djl-pytorch-engine</artifactId>
     </dependency>
     <dependency>
-        <groupId>ai.djl</groupId>
-        <artifactId>djl-pytorch-native-auto</artifactId>
-        <version>0.26.0</version>
+      <groupId>ai.djl</groupId>
+      <artifactId>djl-pytorch-native-auto</artifactId>
     </dependency>
     <dependency>
-        <groupId>ai.djl</groupId>
-        <artifactId>djl-model-zoo</artifactId>
-        <version>0.26.0</version>
-    </dependency>
-           
-    <dependency>
-        <groupId>org.apache.pdfbox</groupId>
-        <artifactId>pdfbox</artifactId>
-        <version>2.0.29</version>
+      <groupId>ai.djl</groupId>
+      <artifactId>djl-model-zoo</artifactId>
     </dependency>
 
-
+    <!-- PDFBox -->
+    <dependency>
+      <groupId>org.apache.pdfbox</groupId>
+      <artifactId>pdfbox</artifactId>
+      <version>2.0.29</version>
+    </dependency>
   </dependencies>
 
   <build>
     <plugins>
-      <!-- Spring Boot plugin for executable JAR -->
+      <!-- Spring Boot plugin -->
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
@@ -116,3 +125,4 @@
     </plugins>
   </build>
 </project>
+
