@@ -94,28 +94,50 @@ public class PaperService {
 
     // OCR text extraction only (no PDFBox)
     private String extractTextFromPDF(MultipartFile file) throws IOException {
-        File tempFile = File.createTempFile("upload-", ".pdf");
-        file.transferTo(tempFile);
+    // Step 1: Copy tessdata to a temporary folder
+    File tessDataTemp = new File(System.getProperty("java.io.tmpdir"), "tessdata");
+    if (!tessDataTemp.exists()) {
+        tessDataTemp.mkdirs();
 
-        Tesseract tesseract = new Tesseract();
-        tesseract.setDatapath("src/main/resources/tessdata");
-        tesseract.setLanguage("eng");
-
-
-        String extractedText = "";
-        try {
-            extractedText = tesseract.doOCR(tempFile);
-        } catch (TesseractException e) {
-            logger.error("OCR failed: ", e);
-        } finally {
-            tempFile.delete();
-        }
-
-        logger.info("OCR extraction completed, length={}", extractedText.length());
-        logger.debug("Full OCR text: {}", extractedText);
-
-        return extractedText;
+        Path resourceTess = Paths.get("src/main/resources/tessdata");
+        Files.walk(resourceTess).forEach(path -> {
+            try {
+                Path dest = tessDataTemp.toPath().resolve(resourceTess.relativize(path));
+                if (Files.isDirectory(path)) {
+                    Files.createDirectories(dest);
+                } else {
+                    Files.copy(path, dest, StandardCopyOption.REPLACE_EXISTING);
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
     }
+
+    // Step 2: Save the uploaded PDF temporarily
+    File tempFile = File.createTempFile("upload-", ".pdf");
+    file.transferTo(tempFile);
+
+    // Step 3: Run OCR
+    Tesseract tesseract = new Tesseract();
+    tesseract.setDatapath(tessDataTemp.getAbsolutePath());
+    tesseract.setLanguage("eng");
+
+    String extractedText = "";
+    try {
+        extractedText = tesseract.doOCR(tempFile);
+    } catch (TesseractException e) {
+        logger.error("OCR failed: ", e);
+    } finally {
+        tempFile.delete();
+    }
+
+    logger.info("OCR extraction completed, length={}", extractedText.length());
+    logger.debug("Full OCR text: {}", extractedText);
+
+    return extractedText;
+}
+
 
     // Search
     public List<Paper> search(String branch, String subject, Integer year, Integer semester, String examType) {
