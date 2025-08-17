@@ -1,5 +1,10 @@
 package com.uietpapers.service;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+
 import com.uietpapers.dto.PaperRequest;
 import com.uietpapers.entity.Paper;
 import com.uietpapers.entity.PendingPaper;
@@ -10,10 +15,9 @@ import net.sourceforge.tess4j.TesseractException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.awt.image.BufferedImage;
-import javax.imageio.ImageIO;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.*;
 import java.util.List;
 import java.util.UUID;
 
@@ -26,13 +30,33 @@ public class PaperService {
     private final PaperRepository paperRepo;
     private final PendingPaperRepository pendingRepo;
     private final StorageService storage;
+    private final String tessDataPath; // optimized: keep tessdata path
 
     private static final Logger logger = LoggerFactory.getLogger(PaperService.class);
 
-    public PaperService(PaperRepository paperRepo, PendingPaperRepository pendingRepo, StorageService storage) {
+    public PaperService(PaperRepository paperRepo, PendingPaperRepository pendingRepo, StorageService storage) throws IOException {
         this.paperRepo = paperRepo;
         this.pendingRepo = pendingRepo;
         this.storage = storage;
+
+        // Copy tessdata to temporary folder once at startup
+        File tessDataTemp = new File(System.getProperty("java.io.tmpdir"), "tessdata");
+        if (!tessDataTemp.exists()) {
+            tessDataTemp.mkdirs();
+            Path resourceTess = Paths.get("src/main/resources/tessdata");
+            if (Files.exists(resourceTess)) {
+                Files.walk(resourceTess).forEach(path -> {
+                    try {
+                        Path dest = tessDataTemp.toPath().resolve(resourceTess.relativize(path));
+                        if (Files.isDirectory(path)) Files.createDirectories(dest);
+                        else Files.copy(path, dest, StandardCopyOption.REPLACE_EXISTING);
+                    } catch (IOException e) {
+                        logger.error("Failed to copy tessdata file: " + path, e);
+                    }
+                });
+            }
+        }
+        this.tessDataPath = tessDataTemp.getAbsolutePath();
     }
 
     // Upload + approve directly
@@ -92,52 +116,29 @@ public class PaperService {
         return lower.contains("exam") || lower.contains("question") || lower.contains("marks");
     }
 
-    // OCR text extraction only (no PDFBox)
+    // OCR text extraction only
     private String extractTextFromPDF(MultipartFile file) throws IOException {
-    // Step 1: Copy tessdata to a temporary folder
-    File tessDataTemp = new File(System.getProperty("java.io.tmpdir"), "tessdata");
-    if (!tessDataTemp.exists()) {
-        tessDataTemp.mkdirs();
+        File tempFile = File.createTempFile("upload-", ".pdf");
+        file.transferTo(tempFile);
 
-        Path resourceTess = Paths.get("src/main/resources/tessdata");
-        Files.walk(resourceTess).forEach(path -> {
-            try {
-                Path dest = tessDataTemp.toPath().resolve(resourceTess.relativize(path));
-                if (Files.isDirectory(path)) {
-                    Files.createDirectories(dest);
-                } else {
-                    Files.copy(path, dest, StandardCopyOption.REPLACE_EXISTING);
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        });
+        Tesseract tesseract = new Tesseract();
+        tesseract.setDatapath(tessDataPath);
+        tesseract.setLanguage("eng");
+
+        String extractedText = "";
+        try {
+            extractedText = tesseract.doOCR(tempFile);
+        } catch (TesseractException e) {
+            logger.error("OCR failed: ", e);
+        } finally {
+            tempFile.delete();
+        }
+
+        logger.info("OCR extraction completed, length={}", extractedText.length());
+        logger.debug("Full OCR text: {}", extractedText);
+
+        return extractedText;
     }
-
-    // Step 2: Save the uploaded PDF temporarily
-    File tempFile = File.createTempFile("upload-", ".pdf");
-    file.transferTo(tempFile);
-
-    // Step 3: Run OCR
-    Tesseract tesseract = new Tesseract();
-    tesseract.setDatapath(tessDataTemp.getAbsolutePath());
-    tesseract.setLanguage("eng");
-
-    String extractedText = "";
-    try {
-        extractedText = tesseract.doOCR(tempFile);
-    } catch (TesseractException e) {
-        logger.error("OCR failed: ", e);
-    } finally {
-        tempFile.delete();
-    }
-
-    logger.info("OCR extraction completed, length={}", extractedText.length());
-    logger.debug("Full OCR text: {}", extractedText);
-
-    return extractedText;
-}
-
 
     // Search
     public List<Paper> search(String branch, String subject, Integer year, Integer semester, String examType) {
@@ -156,7 +157,11 @@ public class PaperService {
         }
 
         if (filePath != null) {
-            try { storage.delete(filePath); } catch (Exception e) { e.printStackTrace(); }
+            try {
+                storage.delete(filePath);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
 
         paperRepo.delete(paper);
