@@ -5,20 +5,28 @@ import com.uietpapers.entity.Paper;
 import com.uietpapers.entity.PendingPaper;
 import com.uietpapers.repository.PaperRepository;
 import com.uietpapers.repository.PendingPaperRepository;
-import net.sourceforge.tess4j.Tesseract;
-import net.sourceforge.tess4j.TesseractException;
-import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
+
+import ai.djl.Model;
+import ai.djl.inference.Predictor;
+import ai.djl.modality.cv.Image;
+import ai.djl.modality.cv.ImageFactory;
+import ai.djl.modality.cv.translator.OcrTranslator;
+import ai.djl.modality.cv.translator.OcrTranslatorFactory;
+import ai.djl.translate.TranslateException;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
+
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -44,7 +52,6 @@ public class PaperService {
     public Paper uploadAndApprovePaper(PaperRequest meta, MultipartFile file) throws Exception {
         PendingPaper pending = uploadPendingPaper(meta, file);
 
-        // Extract text using OCR
         String text = extractTextFromPDF(file);
 
         if (!validatePaperText(text)) {
@@ -91,73 +98,66 @@ public class PaperService {
         return pendingRepo.save(pending);
     }
 
-    // Validate text
+    // Validate extracted text
     private boolean validatePaperText(String text) {
         String lower = text.toLowerCase();
         return lower.contains("exam") || lower.contains("question") || lower.contains("marks");
     }
 
-    // OCR text extraction
+    // OCR extraction using DJL
     private String extractTextFromPDF(MultipartFile file) throws IOException {
-    // 1. Create temp files
-    File tempPdfFile = File.createTempFile("upload-", ".pdf");
-    file.transferTo(tempPdfFile);
-    Path tempImageDir = Files.createTempDirectory("ocr-images");
+        File tempPdfFile = File.createTempFile("upload-", ".pdf");
+        file.transferTo(tempPdfFile);
+        Path tempImageDir = Files.createTempDirectory("ocr-images");
 
-    try {
-        // 2. Verify Tesseract data path
-        File tessdataDir = new File("/usr/share/tessdata");
-        if (!tessdataDir.exists() || !new File(tessdataDir, "eng.traineddata").exists()) {
-            throw new RuntimeException("Tesseract language data not found at " + tessdataDir);
-        }
+        try (PDDocument document = PDDocument.load(tempPdfFile);
+             Model model = Model.newInstance("ocr-model")) {
 
-        // 3. Initialize Tesseract with explicit paths
-        Tesseract tesseract = new Tesseract();
-        tesseract.setDatapath(tessdataDir.getAbsolutePath());
-        tesseract.setLanguage("eng");
-        tesseract.setPageSegMode(1);
-        tesseract.setOcrEngineMode(1);
+            OcrTranslator translator = OcrTranslatorFactory.builder().build();
+            Predictor<Image, String> predictor = model.newPredictor(translator);
 
-        // 4. Process PDF
-        StringBuilder result = new StringBuilder();
-        try (PDDocument document = PDDocument.load(tempPdfFile)) {
+            StringBuilder result = new StringBuilder();
             PDFRenderer renderer = new PDFRenderer(document);
-            
-            for (int page = 0; page < document.getNumberOfPages(); page++) {
-                BufferedImage image = renderer.renderImageWithDPI(page, 300);
-                File imageFile = tempImageDir.resolve("page_" + page + ".png").toFile();
-                ImageIO.write(image, "png", imageFile);
-                
-                result.append(tesseract.doOCR(imageFile));
+
+            for (int i = 0; i < document.getNumberOfPages(); i++) {
+                BufferedImage bufferedImage = renderer.renderImageWithDPI(i, 300);
+                File imageFile = tempImageDir.resolve("page_" + i + ".png").toFile();
+                ImageIO.write(bufferedImage, "png", imageFile);
+
+                Image img = ImageFactory.getInstance().fromFile(imageFile.toPath());
+                try {
+                    String pageText = predictor.predict(img);
+                    result.append(pageText).append("\n");
+                } catch (TranslateException e) {
+                    logger.error("OCR failed for page " + i, e);
+                }
+
                 imageFile.delete();
             }
-        }
-        
-        return result.toString();
-    } catch (Exception e) {
-        logger.error("OCR Processing Failed", e);
-        throw new RuntimeException("OCR processing failed: " + e.getMessage(), e);
-    } finally {
-        // 5. Cleanup
-        Files.deleteIfExists(tempPdfFile.toPath());
-        try {
-            Files.walk(tempImageDir)
-                 .sorted(Comparator.reverseOrder())
-                 .map(Path::toFile)
-                 .forEach(File::delete);
-        } catch (IOException e) {
-            logger.warn("Failed to clean up temp images", e);
+
+            return result.toString();
+        } finally {
+            Files.deleteIfExists(tempPdfFile.toPath());
+            try {
+                Files.walk(tempImageDir)
+                     .sorted(Comparator.reverseOrder())
+                     .map(Path::toFile)
+                     .forEach(File::delete);
+            } catch (IOException e) {
+                logger.warn("Failed to clean up temp images", e);
+            }
         }
     }
-}
-    // Search
+
+    // Search papers
     public List<Paper> search(String branch, String subject, Integer year, Integer semester, String examType) {
         return paperRepo.search(branch, subject, year, semester, examType);
     }
 
     // Delete paper + file
     public void deletePaper(UUID id) {
-        Paper paper = paperRepo.findById(id).orElseThrow(() -> new RuntimeException("Paper not found"));
+        Paper paper = paperRepo.findById(id)
+                .orElseThrow(() -> new RuntimeException("Paper not found"));
         String fileUrl = paper.getFileUrl();
         String bucketPath = "/storage/v1/object/public/" + storage.getBucket() + "/";
         String filePath = null;
@@ -173,3 +173,4 @@ public class PaperService {
         paperRepo.delete(paper);
     }
 }
+
