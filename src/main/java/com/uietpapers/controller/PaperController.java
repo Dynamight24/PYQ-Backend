@@ -3,6 +3,7 @@ package com.uietpapers.controller;
 import com.uietpapers.dto.PaperRequest;
 import com.uietpapers.dto.UploadResponse;
 import com.uietpapers.entity.Paper;
+import com.uietpapers.entity.PendingPaper;
 import com.uietpapers.service.AdminConfig;
 import com.uietpapers.service.PaperService;
 import org.springframework.http.HttpStatus;
@@ -13,27 +14,34 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import java.util.UUID;
+import jakarta.validation.Valid;
+
 
 @RestController
 @RequestMapping("/api")
 public class PaperController {
 
     private final PaperService service;
-    private final AdminConfig adminConfig;
 
-    public PaperController(PaperService service, AdminConfig adminConfig) {
+    public PaperController(PaperService service) {
         this.service = service;
-        this.adminConfig = adminConfig;
     }
 
+    // Upload -> pending -> validate -> approve automatically
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<UploadResponse> upload(
             @Validated @RequestPart("meta") PaperRequest meta,
             @RequestPart("file") MultipartFile file
     ) throws Exception {
-        Paper p = service.uploadPaper(meta, file);
-        return ResponseEntity.ok(new UploadResponse(p.getId(), p.getFileUrl()));
+        Paper approvedPaper = null;
+        try {
+            approvedPaper = service.uploadAndApprovePaper(meta, file);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        return ResponseEntity.ok(new UploadResponse(approvedPaper.getId(), approvedPaper.getFileUrl()));
     }
+
 
     @GetMapping("/papers")
     public List<Paper> search(
@@ -46,23 +54,11 @@ public class PaperController {
         return service.search(branch, subject, year, semester, examType);
     }
 
+    // Delete paper (optional)
     @DeleteMapping("/admin/papers/{id}")
-    public ResponseEntity<Void> deletePaper(@PathVariable UUID id,
-                                            @RequestHeader("X-ADMIN-KEY") String adminKey) {
-        if (!adminConfig.getAdminKey().equals(adminKey)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        }
-
-
-        try {
-            service.deletePaper(id);
-            return ResponseEntity.noContent().build();
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-
+    public ResponseEntity<Void> deletePaper(@PathVariable UUID id) {
+        service.deletePaper(id);
+        return ResponseEntity.noContent().build();
     }
-
-
-
 }
+
