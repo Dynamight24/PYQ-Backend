@@ -92,26 +92,34 @@ public class PaperService {
 
     // OCR text extraction
     private String extractTextFromPDF(MultipartFile file) throws IOException {
-        File tempFile = File.createTempFile("upload-", ".pdf");
-        file.transferTo(tempFile);
+    File tempFile = File.createTempFile("upload-", ".pdf");
+    file.transferTo(tempFile);
 
-        Tesseract tesseract = new Tesseract();
-        tesseract.setLanguage("eng"); // TESSDATA_PREFIX ensures traineddata is found
+    Tesseract tesseract = new Tesseract();
+    
+    // Explicitly set the tessdata path (optional if ENV var is correct)
+    tesseract.setDatapath("/usr/share/tesseract-ocr/tessdata");
+    tesseract.setLanguage("eng");
+    
+    // For better PDF handling
+    tesseract.setPageSegMode(1); // Automatic page segmentation
+    tesseract.setOcrEngineMode(1); // LSTM OCR Engine
 
-        String extractedText = "";
-        try {
-            extractedText = tesseract.doOCR(tempFile);
-        } catch (TesseractException e) {
-            logger.error("OCR failed: ", e);
-        } finally {
-            tempFile.delete();
-        }
-
-        logger.info("OCR extraction completed, length={}", extractedText.length());
-        logger.debug("Full OCR text: {}", extractedText);
-
-        return extractedText;
+    String extractedText = "";
+    try {
+        extractedText = tesseract.doOCR(tempFile);
+    } catch (TesseractException e) {
+        logger.error("OCR failed: ", e);
+        throw new RuntimeException("OCR processing failed", e);
+    } finally {
+        tempFile.delete();
     }
+
+    logger.info("OCR extraction completed, length={}", extractedText.length());
+    logger.debug("Full OCR text: {}", extractedText);
+
+    return extractedText;
+}
 
     // Search
     public List<Paper> search(String branch, String subject, Integer year, Integer semester, String examType) {
