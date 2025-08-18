@@ -3,9 +3,7 @@ FROM maven:3.9.3-eclipse-temurin-17 as build
 WORKDIR /app
 
 # Copy Maven project files
-COPY pom.xml .
-COPY src ./src
-
+COPY . .
 # Build the Spring Boot app
 RUN mvn clean package -DskipTests
 
