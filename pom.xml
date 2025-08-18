@@ -117,6 +117,9 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+         <configuration>
+            <mainClass>com.uietpapers.UietPapersApplication</mainClass>
+        </configuration>
       </plugin>
 
       <!-- Compiler -->
@@ -125,7 +128,7 @@
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.11.0</version>
         <configuration>
-         <mainClass>com.uietpapers.UietPapersApplication</mainClass>
+        
           <source>${java.version}</source>
           <target>${java.version}</target>
         </configuration>
