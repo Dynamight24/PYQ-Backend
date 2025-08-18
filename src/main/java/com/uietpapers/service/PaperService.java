@@ -6,13 +6,17 @@ import com.uietpapers.entity.PendingPaper;
 import com.uietpapers.repository.PaperRepository;
 import com.uietpapers.repository.PendingPaperRepository;
 
-import ai.djl.Model;
-import ai.djl.inference.Predictor;
-import ai.djl.modality.cv.Image;
-import ai.djl.modality.cv.ImageFactory;
-import ai.djl.modality.cv.translator.OcrTranslator;
-import ai.djl.modality.cv.translator.OcrTranslatorFactory;
-import ai.djl.translate.TranslateException;
+import org.bytedeco.javacpp.BytePointer;
+import org.bytedeco.leptonica.PIX;
+import org.bytedeco.tesseract.TessBaseAPI;
+
+
+import static org.bytedeco.leptonica.global.leptonica.pixDestroy;
+import static org.bytedeco.leptonica.global.leptonica.pixReadMem;
+import static org.bytedeco.tesseract.global.tesseract.*;
+ // This is the correct class
+
+
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
@@ -22,16 +26,18 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Comparator;
+import java.nio.file.StandardCopyOption;
+
+import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.io.ClassPathResource;
 
 @Service
 public class PaperService {
@@ -42,7 +48,9 @@ public class PaperService {
 
     private static final Logger logger = LoggerFactory.getLogger(PaperService.class);
 
-    public PaperService(PaperRepository paperRepo, PendingPaperRepository pendingRepo, StorageService storage) {
+    public PaperService(PaperRepository paperRepo,
+                        PendingPaperRepository pendingRepo,
+                        StorageService storage) {
         this.paperRepo = paperRepo;
         this.pendingRepo = pendingRepo;
         this.storage = storage;
@@ -52,6 +60,7 @@ public class PaperService {
     public Paper uploadAndApprovePaper(PaperRequest meta, MultipartFile file) throws Exception {
         PendingPaper pending = uploadPendingPaper(meta, file);
 
+        // Extract text using JavaCPP Tesseract
         String text = extractTextFromPDF(file);
 
         if (!validatePaperText(text)) {
@@ -98,58 +107,66 @@ public class PaperService {
         return pendingRepo.save(pending);
     }
 
-    // Validate extracted text
+    // Validate text
     private boolean validatePaperText(String text) {
         String lower = text.toLowerCase();
-        return lower.contains("exam") || lower.contains("question") || lower.contains("marks");
+        return lower.contains("exam") || lower.contains("sub");
     }
 
-    // OCR extraction using DJL
+    // OCR text extraction with JavaCPP Tesseract + PDFBox
     private String extractTextFromPDF(MultipartFile file) throws IOException {
-        File tempPdfFile = File.createTempFile("upload-", ".pdf");
-        file.transferTo(tempPdfFile);
-        Path tempImageDir = Files.createTempDirectory("ocr-images");
+        StringBuilder extractedText = new StringBuilder();
 
-        try (PDDocument document = PDDocument.load(tempPdfFile);
-             Model model = Model.newInstance("ocr-model")) {
+        // 1️⃣ Load tessdata path
+        // In Docker, tessdata is at /app/tessdata
+        // Locally, you can use "src/main/resources/tessdata" if needed
+        String tessDataPath = "/app/tessdata";
 
-            OcrTranslator translator = OcrTranslatorFactory.builder().build();
-            Predictor<Image, String> predictor = model.newPredictor(translator);
-
-            StringBuilder result = new StringBuilder();
-            PDFRenderer renderer = new PDFRenderer(document);
-
-            for (int i = 0; i < document.getNumberOfPages(); i++) {
-                BufferedImage bufferedImage = renderer.renderImageWithDPI(i, 300);
-                File imageFile = tempImageDir.resolve("page_" + i + ".png").toFile();
-                ImageIO.write(bufferedImage, "png", imageFile);
-
-                Image img = ImageFactory.getInstance().fromFile(imageFile.toPath());
-                try {
-                    String pageText = predictor.predict(img);
-                    result.append(pageText).append("\n");
-                } catch (TranslateException e) {
-                    logger.error("OCR failed for page " + i, e);
-                }
-
-                imageFile.delete();
+        try (TessBaseAPI api = new TessBaseAPI()) {
+            if (api.Init(tessDataPath, "eng") != 0) {
+                throw new RuntimeException("Could not initialize Tesseract.");
             }
 
-            return result.toString();
-        } finally {
-            Files.deleteIfExists(tempPdfFile.toPath());
-            try {
-                Files.walk(tempImageDir)
-                     .sorted(Comparator.reverseOrder())
-                     .map(Path::toFile)
-                     .forEach(File::delete);
-            } catch (IOException e) {
-                logger.warn("Failed to clean up temp images", e);
+            // 2️⃣ Load PDF
+            try (PDDocument document = PDDocument.load(file.getInputStream())) {
+                PDFRenderer pdfRenderer = new PDFRenderer(document);
+                int pages = Math.min(3, document.getNumberOfPages());
+
+                for (int page = 0; page < pages; page++) {
+                    BufferedImage bufferedImage = pdfRenderer.renderImageWithDPI(page, 200);
+
+                    // Convert BufferedImage to byte[] (PNG)
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    ImageIO.write(bufferedImage, "png", baos);
+                    baos.flush();
+                    byte[] imageBytes = baos.toByteArray();
+                    baos.close();
+
+                    // Convert to PIX (Leptonica)
+                    PIX pix = pixReadMem(imageBytes, imageBytes.length);
+                    if (pix == null) {
+                        throw new IOException("Failed to convert BufferedImage to PIX.");
+                    }
+
+                    api.SetImage(pix);
+                    try (BytePointer outText = api.GetUTF8Text()) {
+                        extractedText.append(outText.getString()).append("\n\n");
+                    }
+
+                    pixDestroy(pix); // cleanup
+                }
             }
         }
+
+        String text = extractedText.toString();
+        logger.info(text);
+        return text;
     }
 
-    // Search papers
+
+
+
+    // Search
     public List<Paper> search(String branch, String subject, Integer year, Integer semester, String examType) {
         return paperRepo.search(branch, subject, year, semester, examType);
     }
@@ -167,10 +184,63 @@ public class PaperService {
         }
 
         if (filePath != null) {
-            try { storage.delete(filePath); } catch (Exception e) { e.printStackTrace(); }
+            try {
+                storage.delete(filePath);
+            } catch (Exception e) {
+                logger.error("Failed to delete file from storage", e);
+            }
         }
 
         paperRepo.delete(paper);
     }
 }
+
+
+//private String extractTextFromPDF(MultipartFile file) throws IOException {
+//    StringBuilder extractedText = new StringBuilder();
+//
+//    // Path to tessdata inside resources
+//    ClassPathResource resource = new ClassPathResource("tessdata");
+//    File tessDataDir = resource.getFile();
+//
+//    try (TessBaseAPI api = new TessBaseAPI()) {
+//        if (api.Init(tessDataDir.getAbsolutePath(), "eng") != 0) {
+//            throw new RuntimeException("Could not initialize Tesseract.");
+//        }
+//
+//        try (PDDocument document = PDDocument.load(file.getInputStream())) {
+//            PDFRenderer pdfRenderer = new PDFRenderer(document);
+//            int pages = Math.min(3, document.getNumberOfPages());
+//
+//            for (int page = 0; page < pages; page++) {
+//                BufferedImage bufferedImage = pdfRenderer.renderImageWithDPI(page, 200);
+//
+//                // Convert BufferedImage to byte[] in PNG
+//                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+//                ImageIO.write(bufferedImage, "png", baos);
+//                baos.flush();
+//                byte[] imageBytes = baos.toByteArray();
+//                baos.close();
+//
+//                // Read as PIX (Leptonica)
+//                PIX pix = pixReadMem(imageBytes, imageBytes.length);
+//                if (pix == null) {
+//                    throw new IOException("Failed to convert BufferedImage to PIX.");
+//                }
+//
+//                api.SetImage(pix);
+//                try (BytePointer outText = api.GetUTF8Text()) {
+//                    extractedText.append(outText.getString()).append("\n\n");
+//                }
+//
+//                pixDestroy(pix); // cleanup
+//            }
+//        }
+//    }
+//
+//    String text = extractedText.toString();
+//    logger.info(text);
+//    return text;
+//}
+
 
