@@ -24,7 +24,8 @@ COPY src/main/resources/tessdata/eng.traineddata /usr/share/tessdata/eng.trained
 # Copy the built JAR
 COPY --from=build /app/target/*.jar ./app.jar
 
-ENV JAVA_OPTS="-Xms512m -Xmx2g"
+ENV JAVA_OPTS="-Xms256m -Xmx512m"
+
 
 EXPOSE 8080
 
