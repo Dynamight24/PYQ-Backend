@@ -1,39 +1,43 @@
 # -----------------------
-# Build stage
+# Build stage with Maven
 # -----------------------
 FROM maven:3.9.3-eclipse-temurin-17 AS build
 WORKDIR /app
 
+# Copy project files
 COPY . .
+
+# Build the Spring Boot application
 RUN mvn clean package -DskipTests
 
 # -----------------------
 # Production stage
 # -----------------------
-FROM openjdk:17-jdk-slim
+FROM openjdk:17-jre-alpine
 WORKDIR /app
 
-# Install Tesseract
-RUN apt-get update && apt-get install -y \
-    tesseract-ocr \
-    libtesseract-dev \
-    libleptonica-dev \
-    libjpeg-dev \
-    libpng-dev \
-    libtiff-dev \
-    wget \
-    && rm -rf /var/lib/apt/lists/*
+# Update apk and install tesseract
+RUN apk update && \
+    apk add --no-cache tesseract-ocr bash curl && \
+    mkdir -p /usr/share/tessdata
 
-# Download traineddata for Italian
-RUN mkdir -p /usr/share/tessdata
+# Download language traineddata (you can change "eng" or add more)
 ADD https://github.com/tesseract-ocr/tessdata/raw/master/eng.traineddata /usr/share/tessdata/eng.traineddata
 
-# Copy JAR
-COPY --from=build /app/target/*.jar ./app.jar
+# Verify installation (optional)
+RUN tesseract --list-langs
+RUN tesseract -v
 
-# Expose port
+# Copy built JAR from build stage
+COPY --from=build /app/target/*.jar /app.jar
+
+# Expose application port
 EXPOSE 8080
 
-# Run Spring Boot app
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# Set Java options if needed
+ENV JAVA_OPTS=""
+
+# Run the Spring Boot app
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Djava.security.egd=file:/dev/./urandom -jar /app.jar"]
+
 
