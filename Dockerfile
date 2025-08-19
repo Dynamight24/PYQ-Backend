@@ -24,8 +24,12 @@ WORKDIR /app
 # `tesseract-ocr` is a metapackage that installs core libraries like `libtesseract5`.
 # `tesseract-ocr-eng` installs the English language training data.
 RUN apt-get update && apt-get install -y \
-    tesseract-ocr \
-    tesseract-ocr-eng \
+    libstdc++6 \
+    libgcc-s1 \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    libleptonica-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the Tesseract language data files from the system installation to a known location
