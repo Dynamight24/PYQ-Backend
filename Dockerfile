@@ -1,43 +1,28 @@
-# Stage 1: Build the Spring Boot application
-# Use a Maven image with JDK 17
-FROM maven:3.9.3-eclipse-temurin-17 AS build
-
-# Set the working directory inside the container
+# Build stage with Maven
+FROM maven:3.9.3-eclipse-temurin-17 as build
 WORKDIR /app
-
-# Copy the project files into the build container
 COPY . .
-
-# Package the application, skipping tests to speed up the build
 RUN mvn clean package -DskipTests
 
-# ----------------------------------------------------------------------------------------------------------------------
-
-# Stage 2: Create the final production image
-# Use a lightweight JRE image with Ubuntu 20.04 (Focal Fossa)
+# Production stage
 FROM eclipse-temurin:17-jre-focal
-
-# Set the working directory for the application
 WORKDIR /app
 
-# Install native dependencies for Tesseract and Leptonica.
-# `tesseract-ocr` is a metapackage that installs core libraries like `libtesseract5`.
-# `tesseract-ocr-eng` installs the English language training data.
+# Install required libraries for JavaCPP native binaries
 RUN apt-get update && apt-get install -y \
     libstdc++6 \
     libgcc-s1 \
     && rm -rf /var/lib/apt/lists/*
 
-
-# Copy the Tesseract language data files from the system installation to a known location
-# that your application's code will expect to find.
-RUN cp -r /usr/share/tesseract-ocr/4.00/tessdata /app/tessdata
-
-# Copy the executable JAR from the build stage into the final image
+# Copy built JAR
 COPY --from=build /app/target/*.jar ./app.jar
 
-# Expose the application's port
+# Set library path for native binaries
+ENV LD_LIBRARY_PATH=/usr/lib:/usr/local/lib
+
 EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]
+
 
 ENV LD_LIBRARY_PATH=/usr/lib:/usr/local/lib
 
