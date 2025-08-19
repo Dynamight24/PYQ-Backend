@@ -124,7 +124,7 @@ private String extractTextFromScannedDocument(PDDocument document)
     _tesseract.setLanguage("eng"); // or "eng", "ita+eng", etc.
 
     for (int page = 0; page < document.getNumberOfPages(); page++) {
-        BufferedImage bim = pdfRenderer.renderImageWithDPI(page, 300, ImageType.RGB);
+        BufferedImage bim = pdfRenderer.renderImageWithDPI(page, 150, ImageType.RGB);
 
         // Create a temp image file
         File temp = File.createTempFile("tempfile_" + page, ".png");
