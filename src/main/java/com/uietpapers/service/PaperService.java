@@ -121,7 +121,7 @@ private String extractTextFromScannedDocument(PDDocument document)
 
     ITesseract _tesseract = new Tesseract();
     _tesseract.setDatapath("/usr/share/tessdata/"); // Docker path
-    _tesseract.setLanguage("ita"); // or "eng", "ita+eng", etc.
+    _tesseract.setLanguage("eng"); // or "eng", "ita+eng", etc.
 
     for (int page = 0; page < document.getNumberOfPages(); page++) {
         BufferedImage bim = pdfRenderer.renderImageWithDPI(page, 300, ImageType.RGB);
