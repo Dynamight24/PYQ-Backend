@@ -31,8 +31,11 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Set environment variables for JavaCPP native binaries
+ENV LD_LIBRARY_PATH=/usr/lib:/usr/local/lib
+ENV JAVACPP_LOG=info
 
-# Copy tessdata from your project (if your code uses a local path)
+# Copy tessdata from resources (optional, only if using custom traineddata)
 COPY src/main/resources/tessdata /app/tessdata
 
 # Copy the built JAR from the build stage
@@ -41,6 +44,6 @@ COPY --from=build /app/target/*.jar ./app.jar
 # Expose the port your app listens on
 EXPOSE 8080
 
-# Set JVM property to find native libraries
+# Run Spring Boot with JavaCPP library path
 ENTRYPOINT ["java", "-Djava.library.path=/usr/lib:/usr/local/lib", "-jar", "app.jar"]
 
