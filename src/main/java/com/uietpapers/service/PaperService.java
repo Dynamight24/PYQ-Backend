@@ -113,55 +113,112 @@ public class PaperService {
         return lower.contains("exam") || lower.contains("sub");
     }
 
-    // OCR text extraction with JavaCPP Tesseract + PDFBox
-    private String extractTextFromPDF(MultipartFile file) throws IOException {
-        StringBuilder extractedText = new StringBuilder();
+ private String extractTextFromPDF(MultipartFile file) throws IOException {
+    StringBuilder extractedText = new StringBuilder();
 
-        // 1️⃣ Load tessdata path
-        // In Docker, tessdata is at /app/tessdata
-        // Locally, you can use "src/main/resources/tessdata" if needed
-        String tessDataPath = "/app/tessdata";
+    // 1️⃣ Copy tessdata from resources to a temporary folder
+    ClassPathResource resource = new ClassPathResource("tessdata");
+    File tempTessDataDir = Files.createTempDirectory("tessdata").toFile();
 
-        try (TessBaseAPI api = new TessBaseAPI()) {
-            if (api.Init(tessDataPath, "eng") != 0) {
-                throw new RuntimeException("Could not initialize Tesseract.");
-            }
+    File[] files = resource.getFile().listFiles();
+    if (files != null) {
+        for (File f : files) {
+            Files.copy(f.toPath(), new File(tempTessDataDir, f.getName()).toPath(),
+                    StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
 
-            // 2️⃣ Load PDF
-            try (PDDocument document = PDDocument.load(file.getInputStream())) {
-                PDFRenderer pdfRenderer = new PDFRenderer(document);
-                int pages = Math.min(3, document.getNumberOfPages());
+    // 2️⃣ Initialize Tesseract API
+    try (TessBaseAPI api = new TessBaseAPI()) {
+        // Use temp tessdata dir
+        if (api.Init(tempTessDataDir.getAbsolutePath(), "eng") != 0) {
+            throw new RuntimeException("Could not initialize Tesseract.");
+        }
 
-                for (int page = 0; page < pages; page++) {
-                    BufferedImage bufferedImage = pdfRenderer.renderImageWithDPI(page, 200);
+        // 3️⃣ Load PDF
+        try (PDDocument document = PDDocument.load(file.getInputStream())) {
+            PDFRenderer pdfRenderer = new PDFRenderer(document);
+            int pages = Math.min(3, document.getNumberOfPages());
 
-                    // Convert BufferedImage to byte[] (PNG)
-                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    ImageIO.write(bufferedImage, "png", baos);
-                    baos.flush();
-                    byte[] imageBytes = baos.toByteArray();
-                    baos.close();
+            for (int page = 0; page < pages; page++) {
+                BufferedImage bufferedImage = pdfRenderer.renderImageWithDPI(page, 200);
 
-                    // Convert to PIX (Leptonica)
-                    PIX pix = pixReadMem(imageBytes, imageBytes.length);
-                    if (pix == null) {
-                        throw new IOException("Failed to convert BufferedImage to PIX.");
-                    }
+                // Convert BufferedImage to PIX (Leptonica)
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                ImageIO.write(bufferedImage, "png", baos);
+                byte[] imageBytes = baos.toByteArray();
 
-                    api.SetImage(pix);
-                    try (BytePointer outText = api.GetUTF8Text()) {
-                        extractedText.append(outText.getString()).append("\n\n");
-                    }
-
-                    pixDestroy(pix); // cleanup
+                PIX pix = pixReadMem(imageBytes, imageBytes.length);
+                if (pix == null) {
+                    throw new IOException("Failed to convert BufferedImage to PIX.");
                 }
+
+                api.SetImage(pix);
+                try (BytePointer outText = api.GetUTF8Text()) {
+                    extractedText.append(outText.getString()).append("\n\n");
+                }
+                pixDestroy(pix); // clean up
             }
         }
 
-        String text = extractedText.toString();
-        logger.info(text);
-        return text;
+        api.End(); // release Tesseract resources
     }
+
+    String text = extractedText.toString();
+    logger.info(text);
+    return text;
+}
+
+
+    // OCR text extraction with JavaCPP Tesseract + PDFBox
+    // private String extractTextFromPDF(MultipartFile file) throws IOException {
+    //     StringBuilder extractedText = new StringBuilder();
+
+    //     // 1️⃣ Load tessdata path
+    //     // In Docker, tessdata is at /app/tessdata
+    //     // Locally, you can use "src/main/resources/tessdata" if needed
+    //     String tessDataPath = "/app/tessdata";
+
+    //     try (TessBaseAPI api = new TessBaseAPI()) {
+    //         if (api.Init(tessDataPath, "eng") != 0) {
+    //             throw new RuntimeException("Could not initialize Tesseract.");
+    //         }
+
+    //         // 2️⃣ Load PDF
+    //         try (PDDocument document = PDDocument.load(file.getInputStream())) {
+    //             PDFRenderer pdfRenderer = new PDFRenderer(document);
+    //             int pages = Math.min(3, document.getNumberOfPages());
+
+    //             for (int page = 0; page < pages; page++) {
+    //                 BufferedImage bufferedImage = pdfRenderer.renderImageWithDPI(page, 200);
+
+    //                 // Convert BufferedImage to byte[] (PNG)
+    //                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    //                 ImageIO.write(bufferedImage, "png", baos);
+    //                 baos.flush();
+    //                 byte[] imageBytes = baos.toByteArray();
+    //                 baos.close();
+
+    //                 // Convert to PIX (Leptonica)
+    //                 PIX pix = pixReadMem(imageBytes, imageBytes.length);
+    //                 if (pix == null) {
+    //                     throw new IOException("Failed to convert BufferedImage to PIX.");
+    //                 }
+
+    //                 api.SetImage(pix);
+    //                 try (BytePointer outText = api.GetUTF8Text()) {
+    //                     extractedText.append(outText.getString()).append("\n\n");
+    //                 }
+
+    //                 pixDestroy(pix); // cleanup
+    //             }
+    //         }
+    //     }
+
+    //     String text = extractedText.toString();
+    //     logger.info(text);
+    //     return text;
+    // }
 
 
 
