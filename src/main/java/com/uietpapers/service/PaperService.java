@@ -1,5 +1,4 @@
 package com.uietpapers.service;
-import java.io.InputStream;
 
 import com.uietpapers.dto.PaperRequest;
 import com.uietpapers.entity.Paper;
@@ -7,38 +6,28 @@ import com.uietpapers.entity.PendingPaper;
 import com.uietpapers.repository.PaperRepository;
 import com.uietpapers.repository.PendingPaperRepository;
 
-import org.bytedeco.javacpp.BytePointer;
-import org.bytedeco.leptonica.PIX;
-import org.bytedeco.tesseract.TessBaseAPI;
-
-
-import static org.bytedeco.leptonica.global.leptonica.pixDestroy;
-import static org.bytedeco.leptonica.global.leptonica.pixReadMem;
-import static org.bytedeco.tesseract.global.tesseract.*;
- // This is the correct class
-
-
-
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
+import org.apache.pdfbox.rendering.ImageType;
+
+import net.sourceforge.tess4j.ITesseract;
+import net.sourceforge.tess4j.Tesseract;
+import net.sourceforge.tess4j.TesseractException;
 
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
-
 import java.io.IOException;
+
 import java.util.List;
 import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.io.ClassPathResource;
+
 
 @Service
 public class PaperService {
@@ -114,56 +103,44 @@ public class PaperService {
         return lower.contains("exam") || lower.contains("sub");
     }
 
-private String extractTextFromPDF(MultipartFile file) throws IOException {
+private String extractTextFromPDF(MultipartFile file) throws IOException, TesseractException {
     StringBuilder extractedText = new StringBuilder();
 
-    // 1️⃣ Create a temporary tessdata directory
-    File tempTessDataDir = Files.createTempDirectory("tessdata").toFile();
-
-    // 2️⃣ Copy tessdata files from classpath into temp folder
-    try (InputStream engStream = getClass().getResourceAsStream("/tessdata/eng.traineddata")) {
-        if (engStream == null) {
-            throw new RuntimeException("Cannot find tessdata/eng.traineddata in classpath");
-        }
-        Files.copy(engStream, new File(tempTessDataDir, "eng.traineddata").toPath(),
-                   StandardCopyOption.REPLACE_EXISTING);
-    }
-
-    // 3️⃣ Initialize Tesseract
-    try (TessBaseAPI api = new TessBaseAPI()) {
-        if (api.Init(tempTessDataDir.getAbsolutePath(), "eng") != 0) {
-            throw new RuntimeException("Could not initialize Tesseract.");
-        }
-
-        // 4️⃣ Process PDF pages
-        try (PDDocument document = PDDocument.load(file.getInputStream())) {
-            PDFRenderer pdfRenderer = new PDFRenderer(document);
-            int pages = Math.min(3, document.getNumberOfPages());
-
-            for (int page = 0; page < pages; page++) {
-                BufferedImage bufferedImage = pdfRenderer.renderImageWithDPI(page, 200);
-
-                // Convert to PIX
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                ImageIO.write(bufferedImage, "png", baos);
-                byte[] imageBytes = baos.toByteArray();
-
-                PIX pix = pixReadMem(imageBytes, imageBytes.length);
-                if (pix == null) throw new IOException("Failed to convert BufferedImage to PIX.");
-
-                api.SetImage(pix);
-                try (BytePointer outText = api.GetUTF8Text()) {
-                    extractedText.append(outText.getString()).append("\n\n");
-                }
-                pixDestroy(pix);
-            }
-        }
-
-        api.End();
+    try (PDDocument document = PDDocument.load(file.getInputStream())) {
+        extractedText.append(extractTextFromScannedDocument(document));
     }
 
     return extractedText.toString();
 }
+
+private String extractTextFromScannedDocument(PDDocument document) 
+        throws IOException, TesseractException {
+
+    PDFRenderer pdfRenderer = new PDFRenderer(document);
+    StringBuilder out = new StringBuilder();
+
+    ITesseract _tesseract = new Tesseract();
+    _tesseract.setDatapath("/usr/share/tessdata/"); // Docker path
+    _tesseract.setLanguage("ita"); // or "eng", "ita+eng", etc.
+
+    for (int page = 0; page < document.getNumberOfPages(); page++) {
+        BufferedImage bim = pdfRenderer.renderImageWithDPI(page, 300, ImageType.RGB);
+
+        // Create a temp image file
+        File temp = File.createTempFile("tempfile_" + page, ".png");
+        ImageIO.write(bim, "png", temp);
+
+        // OCR
+        String result = _tesseract.doOCR(temp);
+        out.append(result).append("\n\n");
+
+        // Delete temp file
+        temp.delete();
+    }
+
+    return out.toString();
+}
+
 
 
     // OCR text extraction with JavaCPP Tesseract + PDFBox
