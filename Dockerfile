@@ -27,7 +27,10 @@ RUN apt-get update && apt-get install -y \
     libtiff-dev \
     libstdc++6 \
     libgcc-s1 \
+    libgomp1 \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
+
 
 # Copy tessdata from your project (if your code uses a local path)
 COPY src/main/resources/tessdata /app/tessdata
