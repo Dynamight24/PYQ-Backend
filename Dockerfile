@@ -24,6 +24,8 @@ COPY src/main/resources/tessdata/eng.traineddata /usr/share/tessdata/eng.trained
 # Copy the built JAR
 COPY --from=build /app/target/*.jar ./app.jar
 
+ENV JAVA_OPTS="-Xms512m -Xmx2g"
+
 EXPOSE 8080
 
 ENTRYPOINT ["java", "-Djava.security.egd=file:/dev/./urandom", "-jar", "app.jar"]
