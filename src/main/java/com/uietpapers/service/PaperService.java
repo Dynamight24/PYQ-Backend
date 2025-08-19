@@ -1,4 +1,5 @@
 package com.uietpapers.service;
+import java.io.InputStream;
 
 import com.uietpapers.dto.PaperRequest;
 import com.uietpapers.entity.Paper;
