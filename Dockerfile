@@ -26,11 +26,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     libstdc++6 \
     libgcc-s1 \
-    libjpeg-dev \
-    libpng-dev \
-    libtiff-dev \
-    libleptonica-dev \
     && rm -rf /var/lib/apt/lists/*
+
 
 # Copy the Tesseract language data files from the system installation to a known location
 # that your application's code will expect to find.
@@ -41,6 +38,8 @@ COPY --from=build /app/target/*.jar ./app.jar
 
 # Expose the application's port
 EXPOSE 8080
+
+ENV LD_LIBRARY_PATH=/usr/lib:/usr/local/lib
 
 # Define the command to run the application
 ENTRYPOINT ["java", "-jar", "app.jar"]
