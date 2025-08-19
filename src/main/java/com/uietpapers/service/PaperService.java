@@ -113,29 +113,28 @@ public class PaperService {
         return lower.contains("exam") || lower.contains("sub");
     }
 
- private String extractTextFromPDF(MultipartFile file) throws IOException {
+private String extractTextFromPDF(MultipartFile file) throws IOException {
     StringBuilder extractedText = new StringBuilder();
 
-    // 1️⃣ Copy tessdata from resources to a temporary folder
-    ClassPathResource resource = new ClassPathResource("tessdata");
+    // 1️⃣ Create a temporary tessdata directory
     File tempTessDataDir = Files.createTempDirectory("tessdata").toFile();
 
-    File[] files = resource.getFile().listFiles();
-    if (files != null) {
-        for (File f : files) {
-            Files.copy(f.toPath(), new File(tempTessDataDir, f.getName()).toPath(),
-                    StandardCopyOption.REPLACE_EXISTING);
+    // 2️⃣ Copy tessdata files from classpath into temp folder
+    try (InputStream engStream = getClass().getResourceAsStream("/tessdata/eng.traineddata")) {
+        if (engStream == null) {
+            throw new RuntimeException("Cannot find tessdata/eng.traineddata in classpath");
         }
+        Files.copy(engStream, new File(tempTessDataDir, "eng.traineddata").toPath(),
+                   StandardCopyOption.REPLACE_EXISTING);
     }
 
-    // 2️⃣ Initialize Tesseract API
+    // 3️⃣ Initialize Tesseract
     try (TessBaseAPI api = new TessBaseAPI()) {
-        // Use temp tessdata dir
         if (api.Init(tempTessDataDir.getAbsolutePath(), "eng") != 0) {
             throw new RuntimeException("Could not initialize Tesseract.");
         }
 
-        // 3️⃣ Load PDF
+        // 4️⃣ Process PDF pages
         try (PDDocument document = PDDocument.load(file.getInputStream())) {
             PDFRenderer pdfRenderer = new PDFRenderer(document);
             int pages = Math.min(3, document.getNumberOfPages());
@@ -143,30 +142,26 @@ public class PaperService {
             for (int page = 0; page < pages; page++) {
                 BufferedImage bufferedImage = pdfRenderer.renderImageWithDPI(page, 200);
 
-                // Convert BufferedImage to PIX (Leptonica)
+                // Convert to PIX
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 ImageIO.write(bufferedImage, "png", baos);
                 byte[] imageBytes = baos.toByteArray();
 
                 PIX pix = pixReadMem(imageBytes, imageBytes.length);
-                if (pix == null) {
-                    throw new IOException("Failed to convert BufferedImage to PIX.");
-                }
+                if (pix == null) throw new IOException("Failed to convert BufferedImage to PIX.");
 
                 api.SetImage(pix);
                 try (BytePointer outText = api.GetUTF8Text()) {
                     extractedText.append(outText.getString()).append("\n\n");
                 }
-                pixDestroy(pix); // clean up
+                pixDestroy(pix);
             }
         }
 
-        api.End(); // release Tesseract resources
+        api.End();
     }
 
-    String text = extractedText.toString();
-    logger.info(text);
-    return text;
+    return extractedText.toString();
 }
 
 
