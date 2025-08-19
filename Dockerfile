@@ -20,15 +20,14 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-eng \
-    libtesseract-dev \
-    libleptonica-dev \
+    libleptonica5 \
     libjpeg-dev \
     libpng-dev \
     libtiff-dev \
     libstdc++6 \
     libgcc-s1 \
     libgomp1 \
-    zlib1g-dev \
+    zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
 # Set environment variables for JavaCPP native binaries
