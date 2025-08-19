@@ -14,17 +14,14 @@ RUN mvn clean package -DskipTests
 FROM eclipse-temurin:17-jre-focal
 WORKDIR /app
 
-# Install native library dependencies
-# This is a crucial step to ensure the JNI wrappers can link to the necessary C++ libraries.
+# Install the core native Tesseract library and its dependencies
 RUN apt-get update && apt-get install -y \
-    tesseract-ocr \
+    libtesseract5 \
     libleptonica-dev \
-    # The above two packages usually bring in `libtesseract5`.
-    # We install `tesseract-ocr` to get the core library and the `tessdata` files.
+    tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the tessdata folder from the system installation
-# This is more reliable than copying from your project resources.
 RUN cp -r /usr/share/tesseract-ocr/4.00/tessdata /app/
 
 # Copy JAR from build stage
