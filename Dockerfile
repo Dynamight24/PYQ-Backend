@@ -18,17 +18,20 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy traineddata if using custom language files
+# Copy traineddata for Tess4J
 COPY src/main/resources/tessdata/eng.traineddata /usr/share/tessdata/eng.traineddata
 
-# Copy the built JAR
-COPY --from=build /app/target/*.jar ./app.jar
+# Copy the built JAR to /app.jar (absolute path)
+COPY --from=build /app/target/*.jar /app.jar
 
+# Set JVM memory
 ENV JAVA_OPTS="-Xms256m -Xmx512m"
 
-
+# Expose port
 EXPOSE 8080
 
+# Run the Spring Boot app
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Djava.security.egd=file:/dev/./urandom -jar /app.jar"]
+
 
 
