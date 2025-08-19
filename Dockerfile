@@ -1,5 +1,5 @@
 # -----------------------
-# Build stage with Maven
+# Build stage
 # -----------------------
 FROM maven:3.9.3-eclipse-temurin-17 AS build
 WORKDIR /app
@@ -10,28 +10,30 @@ RUN mvn clean package -DskipTests
 # -----------------------
 # Production stage
 # -----------------------
-FROM eclipse-temurin:17-jre-focal
+FROM openjdk:17-jdk-slim
 WORKDIR /app
 
-# Install Tesseract and its dev libraries
+# Install Tesseract
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
-    tesseract-ocr-eng \
     libtesseract-dev \
     libleptonica-dev \
     libjpeg-dev \
     libpng-dev \
     libtiff-dev \
-    libstdc++6 \
-    libgcc-s1 \
-    libgomp1 \
-    zlib1g-dev \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the built JAR
+# Download traineddata for Italian
+RUN mkdir -p /usr/share/tessdata
+ADD https://github.com/tesseract-ocr/tessdata/raw/master/eng.traineddata /usr/share/tessdata/eng.traineddata
+
+# Copy JAR
 COPY --from=build /app/target/*.jar ./app.jar
 
+# Expose port
 EXPOSE 8080
 
+# Run Spring Boot app
 ENTRYPOINT ["java", "-jar", "app.jar"]
 
