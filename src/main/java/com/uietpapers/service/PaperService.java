@@ -123,22 +123,22 @@ private String extractTextFromScannedDocument(PDDocument document)
     _tesseract.setDatapath("/usr/share/tessdata/"); // Docker path
     _tesseract.setLanguage("eng"); // or "eng", "ita+eng", etc.
 
-    int pages = Math.min(2, document.getNumberOfPages());
+    // int pages = Math.min(1, document.getNumberOfPages());
 
-    for (int page = 0; page < pages; page++) {
-        BufferedImage bim = pdfRenderer.renderImageWithDPI(page, 150, ImageType.RGB);
+    // for (int page = 0; page < pages; page++) {
+        BufferedImage bim = pdfRenderer.renderImageWithDPI(0, 100, ImageType.RGB);
 
         // Create a temp image file
-        File temp = File.createTempFile("tempfile_" + page, ".png");
-        ImageIO.write(bim, "png", temp);
+        // File temp = File.createTempFile("tempfile_" + page, ".png");
+        // ImageIO.write(bim, "png", temp);
 
         // OCR
-        String result = _tesseract.doOCR(temp);
+        String result = _tesseract.doOCR(bim);
         out.append(result).append("\n\n");
 
         // Delete temp file
-        temp.delete();
-    }
+        // temp.delete();
+    // }
 
     return out.toString();
 }
