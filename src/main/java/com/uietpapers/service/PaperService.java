@@ -119,29 +119,62 @@ private String extractTextFromScannedDocument(PDDocument document)
     PDFRenderer pdfRenderer = new PDFRenderer(document);
     StringBuilder out = new StringBuilder();
 
-    ITesseract _tesseract = new Tesseract();
-    _tesseract.setDatapath("/usr/share/tessdata/"); // Docker path
-    _tesseract.setLanguage("eng"); // or "eng", "ita+eng", etc.
+    // Only process the first page (index 0)
+    BufferedImage bim = pdfRenderer.renderImageWithDPI(0, 150, ImageType.RGB);
 
-    // int pages = Math.min(1, document.getNumberOfPages());
+    try {
+        // Try CLI first (much faster if tesseract is installed in container)
+        out.append(extractTextWithTesseractCLI(bim));
+    } catch (Exception e) {
+        // Fallback to Tess4J if CLI fails
+        System.err.println("Falling back to Tess4J OCR: " + e.getMessage());
 
-    // for (int page = 0; page < pages; page++) {
-        BufferedImage bim = pdfRenderer.renderImageWithDPI(0, 100, ImageType.RGB);
+        ITesseract _tesseract = new Tesseract();
+        _tesseract.setDatapath("/usr/share/tessdata/"); 
+        _tesseract.setLanguage("eng");
 
-        // Create a temp image file
-        // File temp = File.createTempFile("tempfile_" + page, ".png");
-        // ImageIO.write(bim, "png", temp);
-
-        // OCR
         String result = _tesseract.doOCR(bim);
         out.append(result).append("\n\n");
-
-        // Delete temp file
-        // temp.delete();
-    // }
+    }
 
     return out.toString();
 }
+
+private String extractTextWithTesseractCLI(BufferedImage bim) throws IOException, InterruptedException {
+    // Create temporary input image
+    Path tempImage = Files.createTempFile("ocr_input_", ".png");
+    ImageIO.write(bim, "png", tempImage.toFile());
+
+    // Create temporary output prefix (Tesseract adds .txt automatically)
+    Path tempOutput = Files.createTempFile("ocr_output_", "");
+    String outPath = tempOutput.toAbsolutePath().toString();
+
+    // Run Tesseract CLI
+    ProcessBuilder pb = new ProcessBuilder(
+        "tesseract",
+        tempImage.toAbsolutePath().toString(),
+        outPath,
+        "-l", "eng"
+    );
+    pb.redirectErrorStream(true);
+    Process proc = pb.start();
+    int exitCode = proc.waitFor();
+
+    if (exitCode != 0) {
+        throw new RuntimeException("Tesseract CLI failed with exit code " + exitCode);
+    }
+
+    // Read OCR result
+    String result = Files.readString(Paths.get(outPath + ".txt"));
+
+    // Cleanup
+    Files.deleteIfExists(tempImage);
+    Files.deleteIfExists(Paths.get(outPath + ".txt"));
+    Files.deleteIfExists(tempOutput); // cleanup dummy prefix file
+
+    return result;
+}
+
 
 
 
