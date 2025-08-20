@@ -77,7 +77,7 @@ public Paper uploadAndApprovePaper(PaperRequest meta, MultipartFile file) throws
     paper.setYear(meta.year());
     paper.setSemester(meta.semester());
     paper.setExamType(meta.examType());
-    paper.setFileUrl(fileUrl);
+    paper.setFileUrl(url);
 
     return paperRepo.save(paper);
 }
