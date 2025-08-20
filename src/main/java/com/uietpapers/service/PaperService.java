@@ -58,7 +58,7 @@ public Paper uploadAndApprovePaper(PaperRequest meta, MultipartFile file) throws
     }
 
     // Step 3: If valid → upload file to storage
-    String fileUrl = storageService.upload(file); // implement according to your storage (S3/Firebase/local)
+    String fileUrl = storage.upload(file); // implement according to your storage (S3/Firebase/local)
 
     // Step 4: Save into main Paper table
     Paper paper = new Paper();
