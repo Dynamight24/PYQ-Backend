@@ -48,7 +48,7 @@ public class PaperService {
 
     // Upload + approve directly
     public Paper uploadAndApprovePaper(PaperRequest meta, MultipartFile file) throws Exception {
-        PendingPaper pending = uploadPendingPaper(meta, file);
+        // PendingPaper pending = uploadPendingPaper(meta, file);
 
         // Extract text using JavaCPP Tesseract
         String text = extractTextFromPDF(file);
@@ -67,35 +67,35 @@ public class PaperService {
         paper.setFileUrl(pending.getFileUrl());
 
         Paper saved = paperRepo.save(paper);
-        pendingRepo.delete(pending);
+        // pendingRepo.delete(pending);
 
         return saved;
     }
 
     // Save to pending
-    public PendingPaper uploadPendingPaper(PaperRequest meta, MultipartFile file) throws Exception {
-        String filename = StorageService.safeFilename(file.getOriginalFilename());
-        String path = String.format("%s/%d/sem-%d/%s/%s",
-                meta.branch().toLowerCase(),
-                meta.year(),
-                meta.semester(),
-                meta.examType().toUpperCase(),
-                filename);
+    // public PendingPaper uploadPendingPaper(PaperRequest meta, MultipartFile file) throws Exception {
+    //     String filename = StorageService.safeFilename(file.getOriginalFilename());
+    //     String path = String.format("%s/%d/sem-%d/%s/%s",
+    //             meta.branch().toLowerCase(),
+    //             meta.year(),
+    //             meta.semester(),
+    //             meta.examType().toUpperCase(),
+    //             filename);
 
-        String url = storage.upload(path, file.getBytes(), file.getContentType());
+    //     String url = storage.upload(path, file.getBytes(), file.getContentType());
 
-        PendingPaper pending = new PendingPaper();
-        pending.setTitle(meta.title());
-        pending.setBranch(meta.branch());
-        pending.setSubject(meta.subject());
-        pending.setYear(meta.year());
-        pending.setSemester(meta.semester());
-        pending.setExamType(meta.examType());
-        pending.setFileUrl(url);
-        pending.setApproved(false);
+    //     PendingPaper pending = new PendingPaper();
+    //     pending.setTitle(meta.title());
+    //     pending.setBranch(meta.branch());
+    //     pending.setSubject(meta.subject());
+    //     pending.setYear(meta.year());
+    //     pending.setSemester(meta.semester());
+    //     pending.setExamType(meta.examType());
+    //     pending.setFileUrl(url);
+    //     pending.setApproved(false);
 
-        return pendingRepo.save(pending);
-    }
+    //     return pendingRepo.save(pending);
+    // }
 
     // Validate text
     private boolean validatePaperText(String text) {
@@ -119,61 +119,54 @@ private String extractTextFromScannedDocument(PDDocument document)
     PDFRenderer pdfRenderer = new PDFRenderer(document);
     StringBuilder out = new StringBuilder();
 
-    // Only process the first page (index 0)
-    BufferedImage bim = pdfRenderer.renderImageWithDPI(0, 150, ImageType.RGB);
+    ITesseract tesseract = new Tesseract();
+    tesseract.setDatapath("/usr/share/tessdata/"); // Docker path
+    tesseract.setLanguage("eng");
 
-    try {
-        // Try CLI first (much faster if tesseract is installed in container)
-        out.append(extractTextWithTesseractCLI(bim));
-    } catch (Exception e) {
-        // Fallback to Tess4J if CLI fails
-        System.err.println("Falling back to Tess4J OCR: " + e.getMessage());
+    // Render only first page at lower DPI for speed
+    BufferedImage bim = pdfRenderer.renderImageWithDPI(0, 100, ImageType.RGB);
 
-        ITesseract _tesseract = new Tesseract();
-        _tesseract.setDatapath("/usr/share/tessdata/"); 
-        _tesseract.setLanguage("eng");
-
-        String result = _tesseract.doOCR(bim);
-        out.append(result).append("\n\n");
-    }
+    // OCR directly on BufferedImage (no temp file)
+    String result = tesseract.doOCR(bim);
+    out.append(result).append("\n\n");
 
     return out.toString();
 }
 
-private String extractTextWithTesseractCLI(BufferedImage bim) throws IOException, InterruptedException {
-    // Create temporary input image
-    Path tempImage = Files.createTempFile("ocr_input_", ".png");
-    ImageIO.write(bim, "png", tempImage.toFile());
+// private String extractTextWithTesseractCLI(BufferedImage bim) throws IOException, InterruptedException {
+//     // Create temporary input image
+//     Path tempImage = Files.createTempFile("ocr_input_", ".png");
+//     ImageIO.write(bim, "png", tempImage.toFile());
 
-    // Create temporary output prefix (Tesseract adds .txt automatically)
-    Path tempOutput = Files.createTempFile("ocr_output_", "");
-    String outPath = tempOutput.toAbsolutePath().toString();
+//     // Create temporary output prefix (Tesseract adds .txt automatically)
+//     Path tempOutput = Files.createTempFile("ocr_output_", "");
+//     String outPath = tempOutput.toAbsolutePath().toString();
 
-    // Run Tesseract CLI
-    ProcessBuilder pb = new ProcessBuilder(
-        "tesseract",
-        tempImage.toAbsolutePath().toString(),
-        outPath,
-        "-l", "eng"
-    );
-    pb.redirectErrorStream(true);
-    Process proc = pb.start();
-    int exitCode = proc.waitFor();
+//     // Run Tesseract CLI
+//     ProcessBuilder pb = new ProcessBuilder(
+//         "tesseract",
+//         tempImage.toAbsolutePath().toString(),
+//         outPath,
+//         "-l", "eng"
+//     );
+//     pb.redirectErrorStream(true);
+//     Process proc = pb.start();
+//     int exitCode = proc.waitFor();
 
-    if (exitCode != 0) {
-        throw new RuntimeException("Tesseract CLI failed with exit code " + exitCode);
-    }
+//     if (exitCode != 0) {
+//         throw new RuntimeException("Tesseract CLI failed with exit code " + exitCode);
+//     }
 
-    // Read OCR result
-    String result = Files.readString(Paths.get(outPath + ".txt"));
+//     // Read OCR result
+//     String result = Files.readString(Paths.get(outPath + ".txt"));
 
-    // Cleanup
-    Files.deleteIfExists(tempImage);
-    Files.deleteIfExists(Paths.get(outPath + ".txt"));
-    Files.deleteIfExists(tempOutput); // cleanup dummy prefix file
+//     // Cleanup
+//     Files.deleteIfExists(tempImage);
+//     Files.deleteIfExists(Paths.get(outPath + ".txt"));
+//     Files.deleteIfExists(tempOutput); // cleanup dummy prefix file
 
-    return result;
-}
+//     return result;
+// }
 
 
 
