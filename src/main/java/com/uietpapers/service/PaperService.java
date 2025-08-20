@@ -58,11 +58,15 @@ public Paper uploadAndApprovePaper(PaperRequest meta, MultipartFile file) throws
     }
 
     // Step 3: If valid → upload file to storage
-    String fileName = file.getOriginalFilename();
-    byte[] bytes = file.getBytes();
-    String contentType = file.getContentType();
+    String filename = StorageService.safeFilename(file.getOriginalFilename());
+        String path = String.format("%s/%d/sem-%d/%s/%s",
+                meta.branch().toLowerCase(),
+                meta.year(),
+                meta.semester(),
+                meta.examType().toUpperCase(),
+                filename);
 
-   String fileUrl = storageService.upload(fileName, bytes, contentType);
+        String url = storage.upload(path, file.getBytes(), file.getContentType());
  // implement according to your storage (S3/Firebase/local)
 
     // Step 4: Save into main Paper table
