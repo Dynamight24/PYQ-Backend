@@ -47,30 +47,33 @@ public class PaperService {
     }
 
     // Upload + approve directly
-    public Paper uploadAndApprovePaper(PaperRequest meta, MultipartFile file) throws Exception {
-        // PendingPaper pending = uploadPendingPaper(meta, file);
+    // Upload + approve directly
+public Paper uploadAndApprovePaper(PaperRequest meta, MultipartFile file) throws Exception {
+    // Step 1: Extract text directly from uploaded PDF (without uploading first)
+    String text = extractTextFromPDF(file);
 
-        // Extract text using JavaCPP Tesseract
-        String text = extractTextFromPDF(file);
-
-        if (!validatePaperText(text)) {
-            throw new RuntimeException("PDF does not seem like a valid exam paper");
-        }
-
-        Paper paper = new Paper();
-        paper.setTitle(meta.title());
-        paper.setBranch(meta.branch());
-        paper.setSubject(meta.subject());
-        paper.setYear(meta.year());
-        paper.setSemester(meta.semester());
-        paper.setExamType(meta.examType());
-        paper.setFileUrl(pending.getFileUrl());
-
-        Paper saved = paperRepo.save(paper);
-        // pendingRepo.delete(pending);
-
-        return saved;
+    // Step 2: Validate content
+    if (!validatePaperText(text)) {
+        throw new RuntimeException("PDF does not seem like a valid exam paper");
     }
+
+    // Step 3: If valid → upload file to storage
+    String fileUrl = storageService.upload(file); // implement according to your storage (S3/Firebase/local)
+
+    // Step 4: Save into main Paper table
+    Paper paper = new Paper();
+    paper.setTitle(meta.title());
+    paper.setBranch(meta.branch());
+    paper.setSubject(meta.subject());
+    paper.setYear(meta.year());
+    paper.setSemester(meta.semester());
+    paper.setExamType(meta.examType());
+    paper.setFileUrl(fileUrl);
+
+    return paperRepo.save(paper);
+}
+
+
 
     // Save to pending
     // public PendingPaper uploadPendingPaper(PaperRequest meta, MultipartFile file) throws Exception {
